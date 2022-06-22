@@ -45,6 +45,6 @@ func main() {
 	println("readFile mentions:")
 
 	for _, m := range readFileMentions {
-		fmt.Println(fmt.Sprintf("<line %d, %s", m.StartPoint().Row+1, m.Content(contents)))
+		fmt.Println(fmt.Sprintf("<line %d, %s>", m.StartPoint().Row+1, m.Content(contents)))
 	}
 }
