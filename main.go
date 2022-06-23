@@ -22,19 +22,21 @@ func main() {
 		panic("file-path is required")
 	}
 
-	p := parser.NewJavascript()
-	ctx := context.Background()
-
 	contents, err := ioutil.ReadFile(*filePath)
 	if err != nil {
 		panic(fmt.Errorf("open file: %w", err))
 	}
 
-	promisesVarName := p.FindFsPromisesVarName(ctx, contents)
+	p := parser.NewJavascript()
+	ctx := context.Background()
+
+	tree := p.Parse(ctx, contents)
+
+	promisesVarName := p.FindFsPromisesVarName(tree, contents)
 
 	println("fs/promises variable named: " + promisesVarName)
 
-	readFileMentions := p.FindReadFile(ctx, contents, promisesVarName)
+	readFileMentions := p.FindReadFile(tree, contents, promisesVarName)
 
 	if len(readFileMentions) == 0 {
 		println("no readFile mentions found")

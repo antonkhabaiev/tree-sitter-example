@@ -19,17 +19,18 @@ func TestNewJavascript(t *testing.T) {
 }
 
 func TestJavascript_FindReadFile(t *testing.T) {
+	ctx := context.Background()
+	j := parser.NewJavascript()
+
+	contents, err := ioutil.ReadFile("javascript_unit_test.js")
+	if err != nil {
+		panic(err)
+	}
+
+	tree := j.Parse(ctx, contents)
 	Convey("FindReadFile", t, func() {
-		ctx := context.Background()
-		j := parser.NewJavascript()
-
-		contents, err := ioutil.ReadFile("javascript_unit_test.js")
-		if err != nil {
-			panic(err)
-		}
-
 		Convey("should find all occurrences", func() {
-			nodes := j.FindReadFile(ctx, contents, "fs")
+			nodes := j.FindReadFile(tree, contents, "fs")
 			So(nodes, ShouldHaveLength, 2)
 			So(nodes[0].StartPoint().Row, ShouldEqual, 7)
 			So(nodes[0].Content(contents), ShouldEqual, `const f = await fs.readFile("/tmp/somefile.txt");`)
@@ -37,25 +38,74 @@ func TestJavascript_FindReadFile(t *testing.T) {
 			So(nodes[1].Content(contents), ShouldEqual, `const f2 = await fs.readFile("/tmp/somefile_2.txt");`)
 		})
 		Convey("should return no results when nothing found", func() {
-			nodes := j.FindReadFile(ctx, contents, "f")
+			nodes := j.FindReadFile(tree, contents, "f")
 			So(nodes, ShouldHaveLength, 0)
 		})
 	})
 }
 
 func TestJavascript_FindFsPromisesVarName(t *testing.T) {
+	contents, err := ioutil.ReadFile("javascript_unit_test.js")
+	if err != nil {
+		panic(err)
+	}
+
 	Convey("FindFsPromisesVarName", t, func() {
 		ctx := context.Background()
 		j := parser.NewJavascript()
-
-		contents, err := ioutil.ReadFile("javascript_unit_test.js")
-		if err != nil {
-			panic(err)
-		}
 		Convey("should find first occurrence of var name definition", func() {
-			actual := j.FindFsPromisesVarName(ctx, contents)
+			tree := j.Parse(ctx, contents)
+
+			actual := j.FindFsPromisesVarName(tree, contents)
 			So(actual, ShouldEqual, "fs")
 		})
-		// Convey("")
+		Convey("should panic when", func() {
+			Convey("no var definition found", func() {
+				contents = []byte(`
+"use strict";
+
+const app = express();
+
+const router = express.Router();
+router.get('/', async (req, res) => {
+    res.send("ok");
+});
+app.use(router);
+
+app.listen(3000, async () => {
+    console.log('App listening locally at :3000');
+});
+`)
+				tree := j.Parse(ctx, contents)
+				So(func() {
+					_ = j.FindFsPromisesVarName(tree, contents)
+				}, ShouldPanicWith,
+					"want exactly one require(\"fs/promises\"), got 0")
+			})
+			Convey("more than one definition found", func() {
+				contents = []byte(`
+"use strict";
+
+const fs = require("fs/promises");
+const fs = require("fs/promises");
+const app = express();
+
+const router = express.Router();
+router.get('/', async (req, res) => {
+    res.send("ok");
+});
+app.use(router);
+
+app.listen(3000, async () => {
+    console.log('App listening locally at :3000');
+});
+`)
+				tree := j.Parse(ctx, contents)
+				So(func() {
+					_ = j.FindFsPromisesVarName(tree, contents)
+				}, ShouldPanicWith,
+					"want exactly one require(\"fs/promises\"), got 2")
+			})
+		})
 	})
 }

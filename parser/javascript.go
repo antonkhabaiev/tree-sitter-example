@@ -21,13 +21,18 @@ func NewJavascript() *Javascript {
 	}
 }
 
-func (j Javascript) FindFsPromisesVarName(ctx context.Context, contents []byte) string {
+func (j Javascript) Parse(ctx context.Context, contents []byte) *sitter.Tree {
 	t, err := j.parser.ParseCtx(ctx, nil, contents)
 	if err != nil {
 		panic(err)
 	}
 
-	results := recurse(t.RootNode(),
+	return t
+}
+
+// FindFsPromisesVarName returns name of the variable for require("fs/promises") module
+func (j Javascript) FindFsPromisesVarName(tree *sitter.Tree, contents []byte) string {
+	results := searchRecursive(tree.RootNode(),
 		make([]*sitter.Node, 0),
 		contents,
 		"call_expression",
@@ -41,28 +46,24 @@ func (j Javascript) FindFsPromisesVarName(ctx context.Context, contents []byte) 
 	return results[0].NamedChild(0).Child(0).Content(contents)
 }
 
-func (j Javascript) FindReadFile(ctx context.Context, contents []byte, varName string) []*sitter.Node {
-	t, err := j.parser.ParseCtx(ctx, nil, contents)
-	if err != nil {
-		panic(err)
-	}
-
-	return recurse(
-		t.RootNode(),
+// FindReadFile returns node that contains lexical_declaration for readFile func
+func (j Javascript) FindReadFile(tree *sitter.Tree, contents []byte, varName string) []*sitter.Node {
+	return searchRecursive(
+		tree.RootNode(),
 		make([]*sitter.Node, 0),
 		contents,
 		"member_expression",
 		varName+".readFile")
 }
 
-func recurse(n *sitter.Node, results []*sitter.Node,
+func searchRecursive(n *sitter.Node, results []*sitter.Node,
 	contents []byte, typeMatch, contentMatch string) []*sitter.Node {
 	if n == nil {
 		return results
 	}
 
-	for i := 0; i < int(n.ChildCount()); i++ {
-		child := n.Child(i)
+	for i := 0; i < int(n.NamedChildCount()); i++ {
+		child := n.NamedChild(i)
 
 		if child.Type() == typeMatch &&
 			child.Content(contents) == contentMatch {
@@ -71,7 +72,7 @@ func recurse(n *sitter.Node, results []*sitter.Node,
 			results = append(results, fullNode)
 		}
 
-		results = recurse(child, results, contents, typeMatch, contentMatch)
+		results = searchRecursive(child, results, contents, typeMatch, contentMatch)
 	}
 
 	return results
