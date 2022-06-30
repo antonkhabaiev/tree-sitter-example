@@ -15,7 +15,7 @@ func main() {
 
 	filePath := flag.String(
 		"file-path",
-		"parser/javascript_test.js",
+		"parser/javascript_unit_test_mod.js",
 		"file path to source code that needs to be parsed")
 
 	if filePath == nil {

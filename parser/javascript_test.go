@@ -80,31 +80,7 @@ app.listen(3000, async () => {
 				So(func() {
 					_ = j.FindFsPromisesVarName(tree, contents)
 				}, ShouldPanicWith,
-					"want exactly one require(\"fs/promises\"), got 0")
-			})
-			Convey("more than one definition found", func() {
-				contents = []byte(`
-"use strict";
-
-const fs = require("fs/promises");
-const fs = require("fs/promises");
-const app = express();
-
-const router = express.Router();
-router.get('/', async (req, res) => {
-    res.send("ok");
-});
-app.use(router);
-
-app.listen(3000, async () => {
-    console.log('App listening locally at :3000');
-});
-`)
-				tree := j.Parse(ctx, contents)
-				So(func() {
-					_ = j.FindFsPromisesVarName(tree, contents)
-				}, ShouldPanicWith,
-					"want exactly one require(\"fs/promises\"), got 2")
+					"couldn't find any occurrences of fs.promises")
 			})
 		})
 	})

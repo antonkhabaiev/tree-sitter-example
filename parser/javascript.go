@@ -2,7 +2,6 @@ package parser
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/javascript"
@@ -30,20 +29,41 @@ func (j Javascript) Parse(ctx context.Context, contents []byte) *sitter.Tree {
 	return t
 }
 
+type VarNameMatch struct {
+	Type    string
+	Content string
+}
+
+func NewVarNameMatch(t, c string) VarNameMatch {
+	return VarNameMatch{
+		Type:    t,
+		Content: c,
+	}
+}
+
 // FindFsPromisesVarName returns name of the variable for require("fs/promises") module
 func (j Javascript) FindFsPromisesVarName(tree *sitter.Tree, contents []byte) string {
 	results := searchRecursive(tree.RootNode(),
 		make([]*sitter.Node, 0),
 		contents,
-		"call_expression",
-		`require("fs/promises")`)
+		[]VarNameMatch{
+			NewVarNameMatch("call_expression", `require("fs/promises")`),
+			NewVarNameMatch("member_expression", `require('fs').promises`),
+			NewVarNameMatch("call_expression", `require('fs')`),
+		},
+	)
 
-	if len(results) != 1 {
-		panic(`want exactly one require("fs/promises"), got ` + fmt.Sprint(len(results)))
+	for _, res := range results {
+		if res.NamedChild(0).NamedChild(1).Content(contents) == `require('fs')` {
+			if res.NamedChild(0).Child(0).Child(1).NamedChild(0).Content(contents) == "promises" {
+				return res.NamedChild(0).Child(0).Child(1).NamedChild(1).Content(contents)
+			}
+		} else {
+			return results[0].NamedChild(0).Child(0).Content(contents)
+		}
 	}
 
-	// assumption fs = require("fs/promises"), can be smarter if need to
-	return results[0].NamedChild(0).Child(0).Content(contents)
+	panic("couldn't find any occurrences of fs.promises")
 }
 
 // FindReadFile returns node that contains lexical_declaration for readFile func
@@ -52,12 +72,14 @@ func (j Javascript) FindReadFile(tree *sitter.Tree, contents []byte, varName str
 		tree.RootNode(),
 		make([]*sitter.Node, 0),
 		contents,
-		"member_expression",
-		varName+".readFile")
+		[]VarNameMatch{
+			NewVarNameMatch("member_expression", varName+".readFile"),
+		},
+	)
 }
 
 func searchRecursive(n *sitter.Node, results []*sitter.Node,
-	contents []byte, typeMatch, contentMatch string) []*sitter.Node {
+	contents []byte, matches []VarNameMatch) []*sitter.Node {
 	if n == nil {
 		return results
 	}
@@ -65,14 +87,16 @@ func searchRecursive(n *sitter.Node, results []*sitter.Node,
 	for i := 0; i < int(n.NamedChildCount()); i++ {
 		child := n.NamedChild(i)
 
-		if child.Type() == typeMatch &&
-			child.Content(contents) == contentMatch {
-			fullNode := getDeclarationParent(child)
+		for _, match := range matches {
+			if child.Type() == match.Type &&
+				child.Content(contents) == match.Content {
+				fullNode := getDeclarationParent(child)
 
-			results = append(results, fullNode)
+				results = append(results, fullNode)
+			}
 		}
 
-		results = searchRecursive(child, results, contents, typeMatch, contentMatch)
+		results = searchRecursive(child, results, contents, matches)
 	}
 
 	return results
